@@ -99,15 +99,31 @@ export default {
         );
       }
 
-      const token = (env.LINE_CHANNEL_ACCESS_TOKEN || '').trim();
-      const userId = (env.LINE_USER_ID || '').trim();
+      const token = (
+        env.LINE_CHANNEL_ACCESS_TOKEN ||
+        env.CHANNEL_ACCESS_TOKEN ||
+        env.LINE_ACCESS_TOKEN ||
+        env.LINE_TOKEN ||
+        ''
+      ).trim();
+      const userId = (
+        env.LINE_USER_ID ||
+        env.USER_ID ||
+        env.LINE_TO ||
+        ''
+      ).trim();
 
       if (!token || !userId) {
+        const missing = [];
+        if (!token) missing.push('LINE_CHANNEL_ACCESS_TOKEN');
+        if (!userId) missing.push('LINE_USER_ID');
+        const envKeys = Object.keys(env || {}).filter((k) => k !== 'ASSETS');
         return jsonResponse(
           {
             ok: false,
-            error:
-              '尚未在 Cloudflare Worker 設定 LINE_CHANNEL_ACCESS_TOKEN 或 LINE_USER_ID 環境變數',
+            error: `Cloudflare Worker 尚未讀到環境變數：${missing.join('、')}（目前執行時已綁定之變數名稱：${
+              envKeys.length ? envKeys.join(', ') : '無 — 請確認是加在「執行時變數與機密」而非「組建變數」'
+            }）`,
           },
           500
         );
