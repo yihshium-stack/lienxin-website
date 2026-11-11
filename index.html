@@ -1535,11 +1535,16 @@
   <script>
     /**
      * =========================================================
-     * [設定區] 後端 Cloudflare Worker / Serverless API Endpoint
-     * 請將下方 WORKER_API_URL 替換為實際部署的後端 Worker 網址
+     * [設定區] 後端 Cloudflare Worker — LINE Messaging API 推播端點
+     * - 當網站部署於 Cloudflare Workers 時，自動使用同源相對路徑 '/api/quote'
+     * - 若從 GitHub Pages 或本機檔案開啟，則自動呼叫 CLOUDFLARE_WORKER_ORIGIN
      * =========================================================
      */
-    const WORKER_API_URL = 'https://api.lienxin-tech.workers.dev/api/v1/quote';
+    const CLOUDFLARE_WORKER_ORIGIN = 'https://lienxin-website.yihshium.workers.dev';
+    const WORKER_API_URL =
+      window.location.hostname.endsWith('.github.io') || window.location.protocol === 'file:'
+        ? `${CLOUDFLARE_WORKER_ORIGIN}/api/quote`
+        : '/api/quote';
 
     /**
      * 三語字典 (中 zh / 英 en / 越 vi)
@@ -1871,7 +1876,7 @@
      */
     async function submitQuoteToWorker(payload) {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000);
+      const timeoutId = setTimeout(() => controller.abort(), 12000);
 
       try {
         const response = await fetch(WORKER_API_URL, {
@@ -1887,11 +1892,12 @@
 
         clearTimeout(timeoutId);
 
-        if (!response.ok) {
-          throw new Error(`Worker API returned HTTP ${response.status}`);
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || data.ok === false) {
+          throw new Error(data.error || `Worker API returned HTTP ${response.status}`);
         }
 
-        return await response.json();
+        return data;
       } finally {
         clearTimeout(timeoutId);
       }
@@ -1930,17 +1936,17 @@
       statusBanner.style.display = 'none';
 
       try {
-        // 呼叫預留之 Worker API fetch() 函式
+        // 呼叫 Cloudflare Worker -> LINE Messaging API 推播函式
         const result = await submitQuoteToWorker(payload);
         statusBanner.className = 'form-status-banner success';
+        statusBanner.style.display = 'block';
         statusBanner.textContent = `${dict.msg_submit_success} (Ref: ${result.ticketId || 'LX-' + Date.now().toString().slice(-6)})`;
         event.target.reset();
       } catch (err) {
-        // 當尚未部署正式 Worker 端點時，於 Console 輸出完整 Payload 並顯示模擬建檔成功提示，方便前端驗收與串接測試
-        console.info('[Worker API Payload Preview] Ready to POST to:', WORKER_API_URL, payload, err);
-        statusBanner.className = 'form-status-banner success';
-        statusBanner.textContent = `${dict.msg_submit_success} [Payload Ready: company="${payload.company}", contact="${payload.contact}", phone="${payload.phone}"]`;
-        event.target.reset();
+        console.error('[Worker LINE API Error]', err);
+        statusBanner.className = 'form-status-banner error';
+        statusBanner.style.display = 'block';
+        statusBanner.textContent = `傳送失敗：${err.message || '請確認 Cloudflare Worker 變數設定或網路連線'}`;
       } finally {
         submitBtn.disabled = false;
         submitBtnText.textContent = dict.btn_submit;
